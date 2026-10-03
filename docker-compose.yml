@@ -1,0 +1,8 @@
+services:
+  onebrain:
+    build: .
+    image: onebrain:latest
+    container_name: onebrain
+    ports:
+      - "8080:8080"
+    restart: unless-stopped

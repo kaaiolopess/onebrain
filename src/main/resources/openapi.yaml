@@ -1,0 +1,191 @@
+openapi: 3.0.3
+info:
+  title: OneBrain - Coupon API
+  description: API para gerenciar cupons de desconto
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8080
+    description: Servidor local
+
+tags:
+  - name: Coupon
+    description: Operações de cupons
+
+paths:
+  /coupon:
+    post:
+      tags:
+        - Coupon
+      summary: Cria um novo cupom
+      description: >
+        Cadastra um cupom. Caracteres especiais do código são removidos antes de salvar,
+        e o código resultante precisa ter exatamente 6 caracteres alfanuméricos.
+      operationId: criarCoupon
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CouponInput'
+      responses:
+        '201':
+          description: Cupom criado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CouponResponse'
+        '400':
+          description: Requisição inválida ou regra de negócio violada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /coupon/{id}:
+    get:
+      tags:
+        - Coupon
+      summary: Busca um cupom pelo ID
+      operationId: buscarCouponPorId
+      parameters:
+        - $ref: '#/components/parameters/CouponId'
+      responses:
+        '200':
+          description: Cupom encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CouponResponse'
+        '404':
+          description: Cupom não encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      tags:
+        - Coupon
+      summary: Apaga um cupom (soft delete)
+      description: >
+        O cupom não é removido do banco: o status passa a ser DELETED e os dados do cadastro são preservados.
+      operationId: apagarCoupon
+      parameters:
+        - $ref: '#/components/parameters/CouponId'
+      responses:
+        '204':
+          description: Cupom apagado com sucesso
+        '404':
+          description: Cupom não encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Cupom já apagado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  parameters:
+    CouponId:
+      name: id
+      in: path
+      required: true
+      description: Identificador do cupom
+      schema:
+        type: string
+        format: uuid
+      example: cef9d1e3-aae5-4ab6-a297-358c6032b1e7
+
+  schemas:
+    CouponInput:
+      type: object
+      required:
+        - code
+        - description
+        - discountValue
+        - expirationDate
+      properties:
+        code:
+          type: string
+          description: Código alfanumérico de 6 caracteres. Caracteres especiais são removidos.
+          example: ABC-123
+        description:
+          type: string
+          example: Cupom de boas-vindas
+        discountValue:
+          type: number
+          description: Valor do desconto (mínimo 0.5)
+          example: 0.8
+        expirationDate:
+          type: string
+          format: date-time
+          description: Data de expiração, que não pode estar no passado
+          example: '2030-11-04T17:14:45.180Z'
+        published:
+          type: boolean
+          description: Indica se o cupom já nasce publicado
+          default: false
+          example: false
+
+    CouponResponse:
+      type: object
+      required:
+        - id
+        - code
+        - description
+        - discountValue
+        - expirationDate
+        - status
+        - published
+        - redeemed
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: cef9d1e3-aae5-4ab6-a297-358c6032b1e7
+        code:
+          type: string
+          example: ABC123
+        description:
+          type: string
+          example: Cupom de boas-vindas
+        discountValue:
+          type: number
+          example: 0.8
+        expirationDate:
+          type: string
+          format: date-time
+          example: '2030-11-04T17:14:45.180Z'
+        status:
+          $ref: '#/components/schemas/CouponStatus'
+        published:
+          type: boolean
+          example: false
+        redeemed:
+          type: boolean
+          example: false
+
+    CouponStatus:
+      type: string
+      enum:
+        - ACTIVE
+        - INACTIVE
+        - DELETED
+      example: ACTIVE
+
+    ErrorResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: BAD_REQUEST
+        errors:
+          type: array
+          items:
+            type: string
+          example:
+            - O código do cupom deve ter exatamente 6 caracteres alfanuméricos
