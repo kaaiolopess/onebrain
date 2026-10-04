@@ -33,15 +33,20 @@ spring:
         enabled: false
   cloud:
     aws:
+      # por padrão aponta para o LocalStack do docker compose; em outro ambiente, sobrescreva as variáveis
+      endpoint: ${AWS_ENDPOINT:http://localhost:4566}
       region:
         static: ${AWS_REGION:us-east-1}
+      credentials:
+        access-key: ${AWS_ACCESS_KEY_ID:test}
+        secret-key: ${AWS_SECRET_ACCESS_KEY:test}
       sqs:
-        # sem a fila ligada, a aplicação sobe normalmente sem AWS nem LocalStack
         enabled: ${coupon.sqs.enabled}
 
 coupon:
   sqs:
-    enabled: ${COUPON_SQS_ENABLED:false}
+    # consumer da fila ligado por padrão; COUPON_SQS_ENABLED=false sobe só a API, sem precisar do LocalStack
+    enabled: ${COUPON_SQS_ENABLED:true}
     queue: ${COUPON_SQS_QUEUE:coupon-status-queue}
   idempotencia:
     ttl-processando: 30s

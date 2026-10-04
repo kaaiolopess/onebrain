@@ -16,6 +16,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.openapitools.model.CouponInput;
 import org.openapitools.model.CouponResponse;
 import org.openapitools.model.CouponStatus;
+import org.openapitools.model.MessageResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
@@ -70,14 +71,15 @@ class CouponControllerTest {
     }
 
     @Test
-    @DisplayName("Deve apagar cupom e retornar NO_CONTENT")
+    @DisplayName("Deve apagar cupom e retornar OK com mensagem de sucesso")
     void deveApagarCoupon() {
         UUID id = UUID.randomUUID();
         doNothing().when(apagarCouponUseCase).execute(id);
 
-        ResponseEntity<Void> response = controller.apagarCoupon(id);
+        ResponseEntity<MessageResponse> response = controller.apagarCoupon(id);
 
-        assertEquals(HttpStatus.NO_CONTENT, response.getStatusCode());
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals("Cupom apagado com sucesso", response.getBody().getMessage());
         verify(apagarCouponUseCase).execute(id);
     }
 }

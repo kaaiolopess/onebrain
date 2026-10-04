@@ -31,7 +31,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * Fluxo completo da mensagem (listener -> caso de uso -> domínio -> H2), com o Redis trocado por um
  * armazenamento em memória de mesmo comportamento.
  */
-@SpringBootTest(classes = MainApplication.class)
+// o consumer real fica desligado: o listener é chamado direto, sem depender de LocalStack
+@SpringBootTest(classes = MainApplication.class, properties = "coupon.sqs.enabled=false")
 @Import(AtualizarStatusIdempotenciaIntegrationTest.IdempotenciaEmMemoriaConfig.class)
 class AtualizarStatusIdempotenciaIntegrationTest {
 

@@ -9,10 +9,7 @@ services:
       # logs em JSON (Elastic Common Schema), com os campos do MDC, para Datadog / Grafana Loki
       LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
       # consumer da fila de status, apontando para o LocalStack
-      COUPON_SQS_ENABLED: "true"
-      SPRING_CLOUD_AWS_ENDPOINT: http://localstack:4566
-      SPRING_CLOUD_AWS_CREDENTIALS_ACCESS_KEY: test
-      SPRING_CLOUD_AWS_CREDENTIALS_SECRET_KEY: test
+      AWS_ENDPOINT: http://localstack:4566
       REDIS_HOST: redis
     depends_on:
       redis:
@@ -40,7 +37,10 @@ services:
     environment:
       SERVICES: sqs
     volumes:
+      # cria a fila e a DLQ quando o LocalStack fica pronto
       - ./localstack/init-sqs.sh:/etc/localstack/init/ready.d/init-sqs.sh
+      # atalho para enviar mensagens: docker exec onebrain-localstack coupon-status <eventId> <couponId> <status>
+      - ./localstack/coupon-status.sh:/usr/local/bin/coupon-status
     healthcheck:
       # só fica saudável depois que o script de inicialização criou a fila
       test: ["CMD", "awslocal", "sqs", "get-queue-url", "--queue-name", "coupon-status-queue"]

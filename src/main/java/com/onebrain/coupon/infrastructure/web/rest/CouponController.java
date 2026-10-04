@@ -9,6 +9,7 @@ import lombok.AllArgsConstructor;
 import org.openapitools.api.CouponApi;
 import org.openapitools.model.CouponInput;
 import org.openapitools.model.CouponResponse;
+import org.openapitools.model.MessageResponse;
 import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -39,9 +40,9 @@ public class CouponController implements CouponApi {
     }
 
     @Override
-    public ResponseEntity<Void> apagarCoupon(UUID id) {
+    public ResponseEntity<MessageResponse> apagarCoupon(UUID id) {
         MDC.put(MdcFilter.COUPON_ID, String.valueOf(id));
         apagarCouponUseCase.execute(id);
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.ok(new MessageResponse("Cupom apagado com sucesso"));
     }
 }

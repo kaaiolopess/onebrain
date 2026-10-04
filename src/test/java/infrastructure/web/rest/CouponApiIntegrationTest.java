@@ -32,7 +32,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest(classes = MainApplication.class)
+// o consumer da fila fica desligado: estes testes não dependem de LocalStack
+@SpringBootTest(classes = MainApplication.class, properties = "coupon.sqs.enabled=false")
 @AutoConfigureMockMvc
 class CouponApiIntegrationTest {
 
@@ -160,7 +161,7 @@ class CouponApiIntegrationTest {
     @DisplayName("GET /coupon/{id} deve retornar 404 para cupom apagado")
     void deveRetornarNotFoundAoBuscarCouponApagado() throws Exception {
         String id = criarERetornarId();
-        mockMvc.perform(delete("/coupon/{id}", id)).andExpect(status().isNoContent());
+        mockMvc.perform(delete("/coupon/{id}", id)).andExpect(status().isOk());
 
         mockMvc.perform(get("/coupon/{id}", id))
                 .andExpect(status().isNotFound())
@@ -188,7 +189,8 @@ class CouponApiIntegrationTest {
         String id = criarERetornarId();
 
         mockMvc.perform(delete("/coupon/{id}", id))
-                .andExpect(status().isNoContent());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message", is("Cupom apagado com sucesso")));
 
         CouponEntity entity = couponRepository.findById(UUID.fromString(id)).orElseThrow();
         assertEquals(CouponStatus.DELETED, entity.getStatus());
@@ -203,7 +205,7 @@ class CouponApiIntegrationTest {
     @DisplayName("DELETE /coupon/{id} não deve apagar cupom já apagado")
     void naoDeveApagarCouponJaApagado() throws Exception {
         String id = criarERetornarId();
-        mockMvc.perform(delete("/coupon/{id}", id)).andExpect(status().isNoContent());
+        mockMvc.perform(delete("/coupon/{id}", id)).andExpect(status().isOk());
 
         mockMvc.perform(delete("/coupon/{id}", id))
                 .andExpect(status().isConflict())
