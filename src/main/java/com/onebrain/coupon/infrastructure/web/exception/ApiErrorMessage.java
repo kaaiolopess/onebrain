@@ -1,4 +1,4 @@
-package com.onebrain.coupon.application.exception;
+package com.onebrain.coupon.infrastructure.web.exception;
 
 import lombok.Builder;
 import lombok.Getter;

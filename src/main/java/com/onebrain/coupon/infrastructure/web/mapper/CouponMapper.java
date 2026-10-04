@@ -1,5 +1,6 @@
-package com.onebrain.coupon.application.mapper;
+package com.onebrain.coupon.infrastructure.web.mapper;
 
+import com.onebrain.coupon.application.useCase.command.CriarCouponCommand;
 import com.onebrain.coupon.domain.model.Coupon;
 import org.openapitools.model.CouponInput;
 import org.openapitools.model.CouponResponse;
@@ -7,10 +8,10 @@ import org.openapitools.model.CouponStatus;
 
 public class CouponMapper {
 
-    public static Coupon toDomain(CouponInput input) {
+    public static CriarCouponCommand toCommand(CouponInput input) {
         if (input == null) return null;
 
-        return Coupon.criar(
+        return new CriarCouponCommand(
                 input.getCode(),
                 input.getDescription(),
                 input.getDiscountValue(),

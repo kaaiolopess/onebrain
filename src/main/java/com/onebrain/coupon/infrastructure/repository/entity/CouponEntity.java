@@ -45,6 +45,11 @@ public class CouponEntity {
 
     private OffsetDateTime deletedAt;
 
+    // lock otimista: salvar com uma versão desatualizada é rejeitado pelo banco
+    @Version
+    private Long version;
+
+    @Column(updatable = false)
     private LocalDateTime created;
 
     private LocalDateTime updated;

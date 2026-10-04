@@ -18,6 +18,7 @@ public class CouponEntityMapper {
                 .redeemed(coupon.isRedeemed())
                 .status(coupon.getStatus())
                 .deletedAt(coupon.getDeletedAt())
+                .version(coupon.getVersion())
                 .build();
     }
 
@@ -33,7 +34,8 @@ public class CouponEntityMapper {
                 Boolean.TRUE.equals(entity.getPublished()),
                 Boolean.TRUE.equals(entity.getRedeemed()),
                 entity.getStatus(),
-                entity.getDeletedAt()
+                entity.getDeletedAt(),
+                entity.getVersion()
         );
     }
 }
