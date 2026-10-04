@@ -1,10 +1,10 @@
-package application.port.rest;
+package infrastructure.web.rest;
 
-import com.onebrain.coupon.application.port.rest.CouponController;
-import com.onebrain.coupon.domain.model.Coupon;
-import com.onebrain.coupon.domain.useCase.interfaces.IApagarCouponUseCase;
-import com.onebrain.coupon.domain.useCase.interfaces.IBuscarCouponPorIdUseCase;
-import com.onebrain.coupon.domain.useCase.interfaces.ISalvarCouponUseCase;
+import com.onebrain.coupon.application.useCase.command.CriarCouponCommand;
+import com.onebrain.coupon.application.useCase.interfaces.IApagarCouponUseCase;
+import com.onebrain.coupon.application.useCase.interfaces.IBuscarCouponPorIdUseCase;
+import com.onebrain.coupon.application.useCase.interfaces.ICriarCouponUseCase;
+import com.onebrain.coupon.infrastructure.web.rest.CouponController;
 import domain.factory.CouponFactory;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -30,7 +30,7 @@ import static org.mockito.Mockito.*;
 class CouponControllerTest {
 
     @Mock
-    private ISalvarCouponUseCase salvarCouponUseCase;
+    private ICriarCouponUseCase criarCouponUseCase;
     @Mock
     private IBuscarCouponPorIdUseCase buscarCouponPorIdUseCase;
     @Mock
@@ -43,14 +43,14 @@ class CouponControllerTest {
     @DisplayName("Deve criar cupom e retornar CREATED")
     void deveCriarCoupon() {
         UUID id = UUID.randomUUID();
-        when(salvarCouponUseCase.execute(any())).thenReturn(CouponFactory.criarCouponSalvo(id));
+        when(criarCouponUseCase.execute(any())).thenReturn(CouponFactory.criarCouponSalvo(id));
 
         var input = new CouponInput("ABC-123", "Cupom de teste", new BigDecimal("0.8"), CouponFactory.dataFutura());
         ResponseEntity<CouponResponse> response = controller.criarCoupon(input);
 
-        ArgumentCaptor<Coupon> captor = ArgumentCaptor.forClass(Coupon.class);
-        verify(salvarCouponUseCase).execute(captor.capture());
-        assertEquals("ABC123", captor.getValue().getCode());
+        ArgumentCaptor<CriarCouponCommand> captor = ArgumentCaptor.forClass(CriarCouponCommand.class);
+        verify(criarCouponUseCase).execute(captor.capture());
+        assertEquals("ABC-123", captor.getValue().code());
         assertEquals(HttpStatus.CREATED, response.getStatusCode());
         assertEquals(id, response.getBody().getId());
         assertEquals("ABC123", response.getBody().getCode());

@@ -1,8 +1,12 @@
-package application.port.rest;
+package infrastructure.web.rest;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.onebrain.coupon.MainApplication;
+import com.onebrain.coupon.domain.exception.CouponJaApagadoException;
+import com.onebrain.coupon.domain.model.Coupon;
 import com.onebrain.coupon.domain.model.CouponStatus;
+import com.onebrain.coupon.domain.port.repository.IApagarCouponRepositoryPort;
+import com.onebrain.coupon.domain.port.repository.IBuscarCouponRepositoryPort;
 import com.onebrain.coupon.infrastructure.repository.entity.CouponEntity;
 import com.onebrain.coupon.infrastructure.repository.interfaces.CouponRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -16,6 +20,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
 import java.time.OffsetDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -23,6 +28,7 @@ import java.util.UUID;
 import static org.hamcrest.Matchers.*;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -36,6 +42,10 @@ class CouponApiIntegrationTest {
     private ObjectMapper objectMapper;
     @Autowired
     private CouponRepository couponRepository;
+    @Autowired
+    private IBuscarCouponRepositoryPort buscarCouponRepositoryPort;
+    @Autowired
+    private IApagarCouponRepositoryPort apagarCouponRepositoryPort;
 
     @BeforeEach
     void limparBanco() {
@@ -112,6 +122,16 @@ class CouponApiIntegrationTest {
     }
 
     @Test
+    @DisplayName("Deve devolver o X-Correlation-Id recebido e gerar um quando não vem")
+    void deveDevolverCorrelationId() throws Exception {
+        mockMvc.perform(get("/coupon/{id}", UUID.randomUUID()).header("X-Correlation-Id", "teste-123"))
+                .andExpect(header().string("X-Correlation-Id", "teste-123"));
+
+        mockMvc.perform(get("/coupon/{id}", UUID.randomUUID()))
+                .andExpect(header().string("X-Correlation-Id", not(emptyOrNullString())));
+    }
+
+    @Test
     @DisplayName("GET /coupon/{id} deve retornar o cupom criado")
     void deveBuscarCoupon() throws Exception {
         String id = criarERetornarId();
@@ -120,7 +140,11 @@ class CouponApiIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id", is(id)))
                 .andExpect(jsonPath("$.code", is("ABC123")))
-                .andExpect(jsonPath("$.status", is("ACTIVE")));
+                .andExpect(jsonPath("$.description", is("Cupom de teste")))
+                .andExpect(jsonPath("$.discountValue", is(0.8)))
+                .andExpect(jsonPath("$.status", is("ACTIVE")))
+                .andExpect(jsonPath("$.published", is(false)))
+                .andExpect(jsonPath("$.redeemed", is(false)));
     }
 
     @Test
@@ -128,14 +152,34 @@ class CouponApiIntegrationTest {
     void deveRetornarNotFoundAoBuscarCouponInexistente() throws Exception {
         mockMvc.perform(get("/coupon/{id}", UUID.randomUUID()))
                 .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.status", is("NOT_FOUND")));
+                .andExpect(jsonPath("$.status", is("NOT_FOUND")))
+                .andExpect(jsonPath("$.errors[0]", containsString("não encontrado")));
+    }
+
+    @Test
+    @DisplayName("GET /coupon/{id} deve retornar 404 para cupom apagado")
+    void deveRetornarNotFoundAoBuscarCouponApagado() throws Exception {
+        String id = criarERetornarId();
+        mockMvc.perform(delete("/coupon/{id}", id)).andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/coupon/{id}", id))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.errors[0]", is("Cupom foi apagado")));
     }
 
     @Test
     @DisplayName("GET /coupon/{id} deve retornar 400 para id que não é UUID")
-    void deveRetornarBadRequestParaIdInvalido() throws Exception {
+    void deveRetornarBadRequestAoBuscarComIdInvalido() throws Exception {
         mockMvc.perform(get("/coupon/{id}", "abc"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("DELETE /coupon/{id} deve retornar 400 para id que não é UUID")
+    void deveRetornarBadRequestParaIdInvalido() throws Exception {
+        mockMvc.perform(delete("/coupon/{id}", "abc"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status", is("BAD_REQUEST")));
     }
 
     @Test
@@ -151,9 +195,8 @@ class CouponApiIntegrationTest {
         assertNotNull(entity.getDeletedAt());
         assertEquals("ABC123", entity.getCode());
         assertEquals("Cupom de teste", entity.getDescription());
-
-        mockMvc.perform(get("/coupon/{id}", id))
-                .andExpect(status().isNotFound());
+        assertNotNull(entity.getCreated());
+        assertEquals(1, couponRepository.count());
     }
 
     @Test
@@ -169,10 +212,31 @@ class CouponApiIntegrationTest {
     }
 
     @Test
+    @DisplayName("Dois deletes concorrentes do mesmo cupom: só o primeiro passa")
+    void naoDeveApagarDuasVezesEmConcorrencia() throws Exception {
+        UUID id = UUID.fromString(criarERetornarId());
+
+        // as duas requisições leem o cupom ainda ativo, antes de qualquer uma salvar
+        Coupon leituraA = buscarCouponRepositoryPort.buscarPorId(id);
+        Coupon leituraB = buscarCouponRepositoryPort.buscarPorId(id);
+        leituraA.apagar();
+        leituraB.apagar();
+
+        apagarCouponRepositoryPort.apagar(leituraA);
+
+        assertThrows(CouponJaApagadoException.class, () -> apagarCouponRepositoryPort.apagar(leituraB));
+        CouponEntity entity = couponRepository.findById(id).orElseThrow();
+        assertEquals(CouponStatus.DELETED, entity.getStatus());
+        assertEquals(leituraA.getDeletedAt().toInstant().truncatedTo(ChronoUnit.MILLIS),
+                entity.getDeletedAt().toInstant().truncatedTo(ChronoUnit.MILLIS));
+    }
+
+    @Test
     @DisplayName("DELETE /coupon/{id} deve retornar 404 para cupom inexistente")
     void deveRetornarNotFoundAoApagarCouponInexistente() throws Exception {
         mockMvc.perform(delete("/coupon/{id}", UUID.randomUUID()))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status", is("NOT_FOUND")));
     }
 
     private ResultActions criar(Map<String, Object> payload) throws Exception {
