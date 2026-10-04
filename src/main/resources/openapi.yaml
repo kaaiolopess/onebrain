@@ -58,7 +58,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/CouponResponse'
         '404':
-          description: Cupom não encontrado
+          description: Cupom não encontrado ou apagado
           content:
             application/json:
               schema:
@@ -73,8 +73,12 @@ paths:
       parameters:
         - $ref: '#/components/parameters/CouponId'
       responses:
-        '204':
+        '200':
           description: Cupom apagado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
         '404':
           description: Cupom não encontrado
           content:
@@ -176,6 +180,15 @@ components:
         - INACTIVE
         - DELETED
       example: ACTIVE
+
+    MessageResponse:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          example: Cupom apagado com sucesso
 
     ErrorResponse:
       type: object

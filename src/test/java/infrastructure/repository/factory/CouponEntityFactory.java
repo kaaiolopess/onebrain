@@ -19,6 +19,7 @@ public class CouponEntityFactory {
                 .published(false)
                 .redeemed(false)
                 .status(CouponStatus.ACTIVE)
+                .version(0L)
                 .build();
     }
 }

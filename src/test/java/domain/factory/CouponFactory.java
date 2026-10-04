@@ -27,6 +27,6 @@ public class CouponFactory {
 
     private static Coupon criarCoupon(UUID id, CouponStatus status, OffsetDateTime deletedAt) {
         return Coupon.restaurar(id, "ABC123", "Cupom de teste", new BigDecimal("0.8"), dataFutura(),
-                false, false, status, deletedAt);
+                false, false, status, deletedAt, 0L);
     }
 }
