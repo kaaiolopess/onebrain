@@ -50,7 +50,7 @@ docker compose up --build
 | Método   | Endpoint        | Descrição                         | Sucesso          | Erros                                      |
 |----------|-----------------|-----------------------------------|------------------|--------------------------------------------|
 | `POST`   | `/coupon`       | Cria um novo cupom                | `201 Created`    | `400` requisição inválida / regra violada  |
-| `GET`    | `/coupon/{id}`  | Busca um cupom pelo ID            | `200 OK`         | `404` não encontrado (ou já apagado)       |
+| `GET`    | `/coupon/{id}`  | Busca um cupom pelo ID            | `200 OK`         | `404` não encontrado ou apagado            |
 | `DELETE` | `/coupon/{id}`  | Apaga um cupom (soft delete)      | `204 No Content` | `404` não encontrado, `409` já apagado     |
 
 ### 📄 Exemplo de requisição (`POST /coupon`)
@@ -127,28 +127,99 @@ A aplicação conta com testes **unitários** (JUnit 5 + Mockito) e de **integra
 
 Este projeto segue os princípios de **Arquitetura Hexagonal / Clean Architecture**, separando bem as responsabilidades:
 
-- **Domain** → Regras de negócio puras (`model`), casos de uso (`useCase`) e portas (`port`)
-- **Application** → Entrada HTTP (`port/rest`), mapeamento da API, tratamento de erros e configuração
-- **Infrastructure** → Acesso a dados (JPA), entidades e implementações das portas
+- **Domain** → Regras de negócio puras (`model`) e portas de saída (`port`). Não conhece web nem banco.
+- **Application** → Casos de uso: orquestram o fluxo chamando o domínio e as portas, sem regra de negócio e sem saber se a entrada é HTTP, fila ou terminal.
+- **Infrastructure** → Adaptadores: entrada HTTP (`web`) e acesso a dados com JPA (`repository`).
 
 ```
 src/main/java/com/onebrain/coupon
 ├── application
-│   ├── config          # OpenApiConfig
-│   ├── exception       # GlobalExceptionHandler, ApiErrorMessage
-│   ├── mapper          # API <-> domínio
-│   └── port/rest       # CouponController
+│   └── useCase         # CriarCouponUseCase, BuscarCouponPorIdUseCase, ApagarCouponUseCase
+│       ├── command     # dados de entrada do caso de uso
+│       └── interfaces
 ├── domain
 │   ├── exception       # violações de regra de negócio
 │   ├── model           # Coupon, CouponStatus
-│   ├── port/repository # portas de saída
-│   └── useCase         # casos de uso e suas interfaces
+│   └── port/repository # portas de saída
 └── infrastructure
     ├── exception
-    └── repository      # entity, impl, interfaces (Spring Data), mapper
+    ├── repository      # entity, impl, interfaces (Spring Data), mapper
+    └── web
+        ├── config      # OpenApiConfig
+        ├── exception   # GlobalExceptionHandler, ApiErrorMessage
+        ├── mapper      # API <-> caso de uso
+        └── rest        # CouponController
 ```
 
 O contrato da API fica em [`src/main/resources/openapi.yaml`](src/main/resources/openapi.yaml); a interface `CouponApi` e os modelos de requisição/resposta são gerados a partir dele no build.
+
+---
+
+## 🔎 Observabilidade
+
+Cada requisição em `/coupon` recebe um **correlationId**, propagado pelo **MDC** para todos os logs daquela requisição.
+
+- Se o cliente enviar o header `X-Correlation-Id`, ele é reaproveitado; caso contrário, a aplicação gera um UUID.
+- O mesmo valor volta no header `X-Correlation-Id` da resposta.
+- Campos no MDC: `correlationId`, `couponId`, `httpMethod` e `path`.
+- Ao final de cada requisição é registrado um log com status e tempo de resposta.
+
+Rodando local, os logs saem em texto:
+
+```
+INFO [onebrain] [correlationId=teste-123 couponId=7727dd1b-...] ... Requisição finalizada: DELETE /coupon/7727dd1b-..., status=204, duracaoMs=12
+```
+
+No Docker (`docker compose up`), os logs saem em **JSON estruturado** (Elastic Common Schema), com os campos do MDC, prontos para Datadog ou Grafana Loki. Para ligar fora do Docker:
+
+```bash
+LOGGING_STRUCTURED_FORMAT_CONSOLE=ecs ./mvnw spring-boot:run
+```
+
+---
+
+## 📨 Consumer SQS: atualização de status
+
+Além da API, a aplicação consome uma fila **SQS** para ativar ou inativar cupons. O consumer fica **desligado por padrão** (a aplicação sobe sem AWS) e é ligado no `docker compose`, que sobe um **LocalStack** com a fila `coupon-status-queue` e a DLQ `coupon-status-dlq`, mais um **Redis**.
+
+### Mensagem
+
+```json
+{ "eventId": "c1f0a2d4-0001", "couponId": "cef9d1e3-aae5-4ab6-a297-358c6032b1e7", "status": "INACTIVE" }
+```
+
+### Regras (no domínio, em `Coupon.alterarStatus`)
+- A fila só alterna entre `ACTIVE` e `INACTIVE`.
+- Cupom apagado não pode ter o status alterado.
+- `DELETED` não é aceito pela fila: apagar é só pelo `DELETE /coupon/{id}`.
+
+### Idempotência
+O SQS entrega cada mensagem **pelo menos uma vez**, então a mesma mensagem pode chegar repetida. Cada `eventId` é registrado no **Redis**:
+
+| Estado da chave | O que acontece com a mensagem |
+|---|---|
+| não existe | é reservada como `PROCESSING` (TTL 30s) e processada; ao terminar vira `DONE` (TTL 24h) |
+| `DONE` | duplicata: é confirmada e ignorada |
+| `PROCESSING` | outra instância ainda está processando: volta para a fila |
+
+Se o processamento falha, a chave é apagada para a próxima entrega poder tentar de novo.
+
+### Tratamento de falhas
+- Mensagem inválida, cupom inexistente ou regra de negócio violada: registra log e descarta (repetir não resolveria).
+- Falha temporária (banco ou Redis fora, conflito de versão): a mensagem volta para a fila e, depois de 3 tentativas, vai para a DLQ.
+
+### Testando com o LocalStack
+
+```bash
+docker compose up --build
+
+# envia uma mensagem (troque o couponId por um id criado pelo POST /coupon)
+docker exec onebrain-localstack awslocal sqs send-message \
+  --queue-url http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/coupon-status-queue \
+  --message-body '{"eventId":"evento-1","couponId":"<id>","status":"INACTIVE"}'
+```
+
+Variáveis de ambiente: `COUPON_SQS_ENABLED`, `COUPON_SQS_QUEUE`, `REDIS_HOST`, `REDIS_PORT`, `AWS_REGION` e `SPRING_CLOUD_AWS_ENDPOINT`.
 
 ---
 

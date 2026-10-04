@@ -1,4 +1,4 @@
-package com.onebrain.coupon.application.config;
+package com.onebrain.coupon.infrastructure.web.config;
 
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Info;

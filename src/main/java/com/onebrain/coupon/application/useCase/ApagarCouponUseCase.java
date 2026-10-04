@@ -1,9 +1,9 @@
-package com.onebrain.coupon.domain.useCase;
+package com.onebrain.coupon.application.useCase;
 
 import com.onebrain.coupon.domain.model.Coupon;
 import com.onebrain.coupon.domain.port.repository.IApagarCouponRepositoryPort;
 import com.onebrain.coupon.domain.port.repository.IBuscarCouponRepositoryPort;
-import com.onebrain.coupon.domain.useCase.interfaces.IApagarCouponUseCase;
+import com.onebrain.coupon.application.useCase.interfaces.IApagarCouponUseCase;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

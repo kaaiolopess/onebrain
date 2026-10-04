@@ -25,6 +25,33 @@ spring:
       settings:
         web-allow-others: true
 
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      repositories:
+        enabled: false
+  cloud:
+    aws:
+      region:
+        static: ${AWS_REGION:us-east-1}
+      sqs:
+        # sem a fila ligada, a aplicação sobe normalmente sem AWS nem LocalStack
+        enabled: ${coupon.sqs.enabled}
+
+coupon:
+  sqs:
+    enabled: ${COUPON_SQS_ENABLED:false}
+    queue: ${COUPON_SQS_QUEUE:coupon-status-queue}
+  idempotencia:
+    ttl-processando: 30s
+    ttl-concluido: 24h
+
+logging:
+  pattern:
+    # campos do MDC em cada linha de log (preenchidos pelo MdcFilter)
+    correlation: "[correlationId=%X{correlationId:-} couponId=%X{couponId:-}] "
+
 springdoc:
   swagger-ui:
     path: /swagger-ui.html

@@ -1,9 +1,9 @@
-package domain.usecase;
+package application.usecase;
 
+import com.onebrain.coupon.application.useCase.BuscarCouponPorIdUseCase;
 import com.onebrain.coupon.domain.exception.CouponNotFoundException;
 import com.onebrain.coupon.domain.model.Coupon;
 import com.onebrain.coupon.domain.port.repository.IBuscarCouponRepositoryPort;
-import com.onebrain.coupon.domain.useCase.BuscarCouponPorIdUseCase;
 import domain.factory.CouponFactory;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -39,8 +39,8 @@ class BuscarCouponPorIdUseCaseTest {
     }
 
     @Test
-    @DisplayName("Deve tratar cupom apagado como não encontrado")
-    void deveLancarNotFoundQuandoCouponApagado() {
+    @DisplayName("Não deve retornar cupom apagado")
+    void naoDeveRetornarCouponApagado() {
         UUID id = UUID.randomUUID();
         when(buscarCouponRepositoryPort.buscarPorId(id)).thenReturn(CouponFactory.criarCouponApagado(id));
 

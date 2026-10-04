@@ -5,4 +5,45 @@ services:
     container_name: onebrain
     ports:
       - "8080:8080"
+    environment:
+      # logs em JSON (Elastic Common Schema), com os campos do MDC, para Datadog / Grafana Loki
+      LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+      # consumer da fila de status, apontando para o LocalStack
+      COUPON_SQS_ENABLED: "true"
+      SPRING_CLOUD_AWS_ENDPOINT: http://localstack:4566
+      SPRING_CLOUD_AWS_CREDENTIALS_ACCESS_KEY: test
+      SPRING_CLOUD_AWS_CREDENTIALS_SECRET_KEY: test
+      REDIS_HOST: redis
+    depends_on:
+      redis:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
     restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: onebrain-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  localstack:
+    image: localstack/localstack:3.8
+    container_name: onebrain-localstack
+    ports:
+      - "4566:4566"
+    environment:
+      SERVICES: sqs
+    volumes:
+      - ./localstack/init-sqs.sh:/etc/localstack/init/ready.d/init-sqs.sh
+    healthcheck:
+      # só fica saudável depois que o script de inicialização criou a fila
+      test: ["CMD", "awslocal", "sqs", "get-queue-url", "--queue-name", "coupon-status-queue"]
+      interval: 5s
+      timeout: 5s
+      retries: 20

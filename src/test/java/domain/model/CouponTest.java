@@ -1,6 +1,7 @@
 package domain.model;
 
 import com.onebrain.coupon.domain.exception.CouponJaApagadoException;
+import com.onebrain.coupon.domain.exception.CouponNotFoundException;
 import com.onebrain.coupon.domain.exception.RegraNegocioException;
 import com.onebrain.coupon.domain.model.Coupon;
 import com.onebrain.coupon.domain.model.CouponStatus;
@@ -161,10 +162,75 @@ class CouponTest {
     }
 
     @Test
+    @DisplayName("Deve inativar e reativar um cupom")
+    void deveAlterarStatus() {
+        Coupon coupon = CouponFactory.criarCouponSalvo(UUID.randomUUID());
+
+        coupon.alterarStatus(CouponStatus.INACTIVE);
+        assertEquals(CouponStatus.INACTIVE, coupon.getStatus());
+
+        coupon.alterarStatus(CouponStatus.ACTIVE);
+        assertEquals(CouponStatus.ACTIVE, coupon.getStatus());
+    }
+
+    @Test
+    @DisplayName("Pedir o status atual não altera o cupom")
+    void deveManterStatusQuandoIgual() {
+        Coupon coupon = CouponFactory.criarCouponSalvo(UUID.randomUUID());
+
+        coupon.alterarStatus(CouponStatus.ACTIVE);
+
+        assertEquals(CouponStatus.ACTIVE, coupon.getStatus());
+    }
+
+    @Test
+    @DisplayName("Não deve alterar o status de um cupom apagado")
+    void naoDeveAlterarStatusDeCouponApagado() {
+        Coupon coupon = CouponFactory.criarCouponApagado(UUID.randomUUID());
+
+        assertThrows(CouponJaApagadoException.class, () -> coupon.alterarStatus(CouponStatus.ACTIVE));
+        assertEquals(CouponStatus.DELETED, coupon.getStatus());
+    }
+
+    @Test
+    @DisplayName("Não deve apagar um cupom pela alteração de status")
+    void naoDeveApagarPelaAlteracaoDeStatus() {
+        Coupon coupon = CouponFactory.criarCouponSalvo(UUID.randomUUID());
+
+        assertThrows(RegraNegocioException.class, () -> coupon.alterarStatus(CouponStatus.DELETED));
+        assertEquals(CouponStatus.ACTIVE, coupon.getStatus());
+        assertNull(coupon.getDeletedAt());
+    }
+
+    @Test
+    @DisplayName("Não deve alterar o status sem informar o novo status")
+    void naoDeveAlterarStatusSemNovoStatus() {
+        Coupon coupon = CouponFactory.criarCouponSalvo(UUID.randomUUID());
+
+        assertThrows(RegraNegocioException.class, () -> coupon.alterarStatus(null));
+    }
+
+    @Test
+    @DisplayName("Cupom ativo pode ser consultado")
+    void devePermitirConsultarCouponAtivo() {
+        Coupon coupon = CouponFactory.criarCouponSalvo(UUID.randomUUID());
+
+        assertDoesNotThrow(coupon::garantirNaoApagado);
+    }
+
+    @Test
+    @DisplayName("Cupom apagado não pode ser consultado")
+    void naoDevePermitirConsultarCouponApagado() {
+        Coupon coupon = CouponFactory.criarCouponApagado(UUID.randomUUID());
+
+        assertThrows(CouponNotFoundException.class, coupon::garantirNaoApagado);
+    }
+
+    @Test
     @DisplayName("Deve permitir apagar cupom mesmo depois de expirado")
     void deveApagarCouponExpirado() {
         Coupon coupon = Coupon.restaurar(UUID.randomUUID(), "ABC123", DESCRICAO, DESCONTO,
-                OffsetDateTime.now().minusDays(10), true, false, CouponStatus.ACTIVE, null);
+                OffsetDateTime.now().minusDays(10), true, false, CouponStatus.ACTIVE, null, 0L);
 
         coupon.apagar();
 

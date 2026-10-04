@@ -58,7 +58,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/CouponResponse'
         '404':
-          description: Cupom não encontrado
+          description: Cupom não encontrado ou apagado
           content:
             application/json:
               schema:

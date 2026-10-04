@@ -1,4 +1,4 @@
-package domain.usecase;
+package application.usecase;
 
 import com.onebrain.coupon.domain.exception.CouponJaApagadoException;
 import com.onebrain.coupon.domain.exception.CouponNotFoundException;
@@ -6,7 +6,7 @@ import com.onebrain.coupon.domain.model.Coupon;
 import com.onebrain.coupon.domain.model.CouponStatus;
 import com.onebrain.coupon.domain.port.repository.IApagarCouponRepositoryPort;
 import com.onebrain.coupon.domain.port.repository.IBuscarCouponRepositoryPort;
-import com.onebrain.coupon.domain.useCase.ApagarCouponUseCase;
+import com.onebrain.coupon.application.useCase.ApagarCouponUseCase;
 import domain.factory.CouponFactory;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

@@ -1,6 +1,7 @@
 package com.onebrain.coupon.domain.model;
 
 import com.onebrain.coupon.domain.exception.CouponJaApagadoException;
+import com.onebrain.coupon.domain.exception.CouponNotFoundException;
 import com.onebrain.coupon.domain.exception.RegraNegocioException;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -30,6 +31,8 @@ public class Coupon {
     private final boolean redeemed;
     private CouponStatus status;
     private OffsetDateTime deletedAt;
+    // versão do registro lida do banco, usada para detectar alterações concorrentes ao salvar
+    private final Long version;
 
     /**
      * Cria um novo cupom aplicando as regras de negócio do cadastro.
@@ -45,6 +48,7 @@ public class Coupon {
                 Boolean.TRUE.equals(published),
                 false,
                 CouponStatus.ACTIVE,
+                null,
                 null
         );
     }
@@ -54,8 +58,9 @@ public class Coupon {
      */
     public static Coupon restaurar(UUID id, String code, String description, BigDecimal discountValue,
                                    OffsetDateTime expirationDate, boolean published, boolean redeemed,
-                                   CouponStatus status, OffsetDateTime deletedAt) {
-        return new Coupon(id, code, description, discountValue, expirationDate, published, redeemed, status, deletedAt);
+                                   CouponStatus status, OffsetDateTime deletedAt, Long version) {
+        return new Coupon(id, code, description, discountValue, expirationDate, published, redeemed, status,
+                deletedAt, version);
     }
 
     /**
@@ -67,6 +72,31 @@ public class Coupon {
         }
         this.status = CouponStatus.DELETED;
         this.deletedAt = OffsetDateTime.now();
+    }
+
+    /**
+     * Ativa ou inativa o cupom. Pedir o status em que ele já está não altera nada.
+     */
+    public void alterarStatus(CouponStatus novoStatus) {
+        if (novoStatus == null) {
+            throw new RegraNegocioException("O novo status do cupom é obrigatório");
+        }
+        if (isApagado()) {
+            throw new CouponJaApagadoException("Cupom apagado não pode ter o status alterado");
+        }
+        if (novoStatus == CouponStatus.DELETED) {
+            throw new RegraNegocioException("Um cupom só pode ser apagado pela operação de exclusão");
+        }
+        this.status = novoStatus;
+    }
+
+    /**
+     * Um cupom apagado não pode mais ser consultado.
+     */
+    public void garantirNaoApagado() {
+        if (isApagado()) {
+            throw new CouponNotFoundException("Cupom foi apagado");
+        }
     }
 
     public boolean isApagado() {
