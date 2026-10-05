@@ -47,7 +47,7 @@ coupon:
   sqs:
     # consumer da fila ligado por padrão; COUPON_SQS_ENABLED=false sobe só a API, sem precisar do LocalStack
     enabled: ${COUPON_SQS_ENABLED:true}
-    queue: ${COUPON_SQS_QUEUE:coupon-status-queue}
+    queue: ${COUPON_SQS_QUEUE:coupon-status-queue.fifo}
   idempotencia:
     ttl-processando: 30s
     ttl-concluido: 24h

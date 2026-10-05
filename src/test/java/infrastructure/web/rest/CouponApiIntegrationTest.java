@@ -6,7 +6,9 @@ import com.onebrain.coupon.domain.exception.CouponJaApagadoException;
 import com.onebrain.coupon.domain.model.Coupon;
 import com.onebrain.coupon.domain.model.CouponStatus;
 import com.onebrain.coupon.domain.port.repository.IApagarCouponRepositoryPort;
+import com.onebrain.coupon.domain.port.repository.IAtualizarCouponRepositoryPort;
 import com.onebrain.coupon.domain.port.repository.IBuscarCouponRepositoryPort;
+import com.onebrain.coupon.infrastructure.exception.AtualizarCouponRepositoryException;
 import com.onebrain.coupon.infrastructure.repository.entity.CouponEntity;
 import com.onebrain.coupon.infrastructure.repository.interfaces.CouponRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -47,6 +49,8 @@ class CouponApiIntegrationTest {
     private IBuscarCouponRepositoryPort buscarCouponRepositoryPort;
     @Autowired
     private IApagarCouponRepositoryPort apagarCouponRepositoryPort;
+    @Autowired
+    private IAtualizarCouponRepositoryPort atualizarCouponRepositoryPort;
 
     @BeforeEach
     void limparBanco() {
@@ -231,6 +235,43 @@ class CouponApiIntegrationTest {
         assertEquals(CouponStatus.DELETED, entity.getStatus());
         assertEquals(leituraA.getDeletedAt().toInstant().truncatedTo(ChronoUnit.MILLIS),
                 entity.getDeletedAt().toInstant().truncatedTo(ChronoUnit.MILLIS));
+    }
+
+    @Test
+    @DisplayName("O delete vale mesmo que o status do cupom mude depois da leitura")
+    void deveApagarMesmoComMudancaDeStatusConcorrente() throws Exception {
+        UUID id = UUID.fromString(criarERetornarId());
+
+        // o delete lê o cupom e, antes de salvar, a fila inativa o mesmo cupom
+        Coupon leituraDoDelete = buscarCouponRepositoryPort.buscarPorId(id);
+        Coupon leituraDaFila = buscarCouponRepositoryPort.buscarPorId(id);
+        leituraDaFila.alterarStatus(CouponStatus.INACTIVE);
+        atualizarCouponRepositoryPort.atualizar(leituraDaFila);
+        leituraDoDelete.apagar();
+
+        apagarCouponRepositoryPort.apagar(leituraDoDelete);
+
+        CouponEntity entity = couponRepository.findById(id).orElseThrow();
+        assertEquals(CouponStatus.DELETED, entity.getStatus());
+        assertNotNull(entity.getDeletedAt());
+        assertEquals(2L, entity.getVersion());
+    }
+
+    @Test
+    @DisplayName("Uma alteração de status lida antes do delete não desfaz o delete")
+    void alteracaoDeStatusAtrasadaNaoDesfazODelete() throws Exception {
+        UUID id = UUID.fromString(criarERetornarId());
+
+        // a fila lê o cupom ainda ativo, o delete é aplicado, e só então a fila tenta salvar
+        Coupon leituraDaFila = buscarCouponRepositoryPort.buscarPorId(id);
+        Coupon leituraDoDelete = buscarCouponRepositoryPort.buscarPorId(id);
+        leituraDoDelete.apagar();
+        apagarCouponRepositoryPort.apagar(leituraDoDelete);
+        leituraDaFila.alterarStatus(CouponStatus.INACTIVE);
+
+        assertThrows(AtualizarCouponRepositoryException.class,
+                () -> atualizarCouponRepositoryPort.atualizar(leituraDaFila));
+        assertEquals(CouponStatus.DELETED, couponRepository.findById(id).orElseThrow().getStatus());
     }
 
     @Test

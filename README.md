@@ -149,7 +149,8 @@ Todas as regras estão encapsuladas no objeto de domínio [`Coupon`](src/main/ja
 ### Delete
 - Um cupom pode ser apagado a qualquer momento (inclusive depois de expirado).
 - É feito **soft delete**: o registro permanece no banco com status `DELETED` e a data em `deleted_at`, preservando os dados do cadastro.
-- **Não é possível apagar um cupom já apagado** (`409 Conflict`). Um controle de versão (`@Version`) garante isso mesmo com duas requisições simultâneas.
+- **Não é possível apagar um cupom já apagado** (`409 Conflict`). O soft delete é um único `UPDATE` condicional (só alcança o cupom ainda não apagado), então, com duas requisições simultâneas, o banco deixa passar apenas a primeira.
+- O delete **não depende da versão lida**: se o status mudar pela fila entre a leitura e a gravação, o cupom é apagado mesmo assim. O update incrementa a versão (`@Version`), para que uma alteração de status lida antes do delete seja rejeitada em vez de "ressuscitar" o cupom.
 - Um cupom apagado deixa de ser encontrado pelo `GET` (`404`).
 
 ---
@@ -168,7 +169,7 @@ Pontos em que o enunciado deixava margem, e o que foi decidido:
 
 ## 📨 Consumer SQS: atualização de status
 
-A aplicação consome a fila `coupon-status-queue` para **ativar ou inativar** cupons. Com o `docker compose`, o LocalStack já sobe com a fila e a DLQ (`coupon-status-dlq`) criadas.
+A aplicação consome a fila **FIFO** `coupon-status-queue.fifo` para **ativar ou inativar** cupons. Com o `docker compose`, o LocalStack já sobe com a fila e a DLQ (`coupon-status-dlq.fifo`) criadas.
 
 ### Testando em 4 passos
 
@@ -193,7 +194,7 @@ Os argumentos são: `eventId`, `couponId` e o novo status (`ACTIVE` ou `INACTIVE
 
 Para acompanhar o log no Docker: `docker logs -f onebrain`. Lá as mesmas mensagens saem em JSON, com `correlationId` e `couponId` como campos.
 
-**4. Teste a idempotência.** Repita exatamente o comando do passo 2. O log mostra `Evento evento-1 já processado, ignorando` e o cupom não muda. Para reativar, envie um evento novo:
+**4. Teste a idempotência.** Repita exatamente o comando do passo 2 (o atalho envia cada mensagem com um id de deduplicação novo, para que a repetição chegue até a aplicação em vez de ser descartada pelo SQS). O log mostra `Evento evento-1 já processado, ignorando` e o cupom não muda. Para reativar, envie um evento novo:
 
 ```bash
 docker exec onebrain-localstack coupon-status evento-2 <id-do-cupom> ACTIVE
@@ -209,7 +210,7 @@ docker exec onebrain-redis redis-cli get onebrain:coupon-status:evento:evento-1
 
 # quantidade de mensagens na DLQ
 docker exec onebrain-localstack awslocal sqs get-queue-attributes \
-  --queue-url http://localhost:4566/000000000000/coupon-status-dlq \
+  --queue-url http://localhost:4566/000000000000/coupon-status-dlq.fifo \
   --attribute-names ApproximateNumberOfMessages
 ```
 
@@ -224,8 +225,13 @@ docker exec onebrain-localstack awslocal sqs get-queue-attributes \
 - Cupom apagado não pode ter o status alterado.
 - `DELETED` não é aceito pela fila: apagar é só pelo `DELETE /coupon/{id}`.
 
+### Ordem das mensagens
+A fila é **FIFO** e o `couponId` é o `MessageGroupId`: as mensagens de um mesmo cupom são entregues na ordem em que foram enviadas, uma de cada vez, e cupons diferentes continuam sendo processados em paralelo. Sem isso, um `INACTIVE` seguido de um `ACTIVE` poderia ser aplicado ao contrário e deixar o cupom no estado errado.
+
+Enquanto uma mensagem falha e aguarda nova tentativa, as seguintes do mesmo cupom ficam retidas; elas só andam quando a mensagem é processada ou vai para a DLQ.
+
 ### Idempotência
-O SQS entrega cada mensagem **pelo menos uma vez**, então a mesma mensagem pode chegar repetida. Cada `eventId` é registrado no **Redis**:
+A deduplicação da fila FIFO só cobre reenvios do produtor dentro de 5 minutos. Na entrega, a mensagem ainda volta se o consumer não confirmar a tempo, então a mesma mensagem pode chegar repetida. Cada `eventId` é registrado no **Redis**:
 
 | Estado da chave | O que acontece com a mensagem |
 |---|---|
@@ -244,7 +250,7 @@ Se o processamento falha, a chave é apagada para a próxima entrega poder tenta
 | Variável | Padrão | Para que serve |
 |---|---|---|
 | `COUPON_SQS_ENABLED` | `true` | liga ou desliga o consumer da fila |
-| `COUPON_SQS_QUEUE` | `coupon-status-queue` | nome da fila |
+| `COUPON_SQS_QUEUE` | `coupon-status-queue.fifo` | nome da fila |
 | `AWS_ENDPOINT` | `http://localhost:4566` | endereço do SQS (LocalStack) |
 | `AWS_REGION` | `us-east-1` | região |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | `test` / `test` | credenciais (as do LocalStack) |

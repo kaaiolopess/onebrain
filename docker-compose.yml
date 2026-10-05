@@ -43,7 +43,7 @@ services:
       - ./localstack/coupon-status.sh:/usr/local/bin/coupon-status
     healthcheck:
       # só fica saudável depois que o script de inicialização criou a fila
-      test: ["CMD", "awslocal", "sqs", "get-queue-url", "--queue-name", "coupon-status-queue"]
+      test: ["CMD", "awslocal", "sqs", "get-queue-url", "--queue-name", "coupon-status-queue.fifo"]
       interval: 5s
       timeout: 5s
       retries: 20
