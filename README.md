@@ -48,28 +48,31 @@ As portas `8080` (aplicação), `6379` (Redis) e `4566` (LocalStack) precisam es
 
 ### Opção 2 — Aplicação pela IDE ou Maven, com a fila (requer JDK 21 e Docker)
 
-Útil para depurar. O Redis e o LocalStack rodam no Docker e a aplicação roda na sua máquina. Não é preciso configurar nada: por padrão a aplicação já aponta para o LocalStack em `localhost:4566`.
+Útil para depurar. O Redis e o LocalStack rodam no Docker e a aplicação roda na sua máquina, com o consumer ligado pela variável `COUPON_SQS_ENABLED=true`. O endereço do LocalStack (`localhost:4566`) já é o padrão.
 
 ```bash
 docker compose up -d redis localstack
-./mvnw spring-boot:run
+
+# Linux / Mac
+COUPON_SQS_ENABLED=true ./mvnw spring-boot:run
+
+# Windows (PowerShell)
+$env:COUPON_SQS_ENABLED="true"; .\mvnw.cmd spring-boot:run
 ```
 
-Na IDE, em vez do segundo comando, rode a classe `MainApplication`.
+Na IDE, defina a mesma variável de ambiente na configuração de execução da classe `MainApplication`.
 
-> O consumer da fila vem **ligado por padrão**. Se o LocalStack não estiver no ar, a aplicação não sobe. Para isso existe a Opção 3.
+> Com o consumer ligado, a aplicação não sobe se o LocalStack não estiver no ar.
 
 ### Opção 3 — Só a API, sem Docker (requer JDK 21)
 
-Desliga o consumer com a variável `COUPON_SQS_ENABLED=false`. A aplicação sobe sozinha, sem Redis e sem fila:
+O consumer da fila vem **desligado por padrão**, então a aplicação sobe sozinha, sem Redis e sem fila:
 
 ```bash
-# Linux / Mac
-COUPON_SQS_ENABLED=false ./mvnw spring-boot:run
-
-# Windows (PowerShell)
-$env:COUPON_SQS_ENABLED="false"; .\mvnw.cmd spring-boot:run
+./mvnw spring-boot:run
 ```
+
+Na IDE, basta rodar a classe `MainApplication`.
 
 ### Endereços
 
@@ -142,7 +145,7 @@ Todas as regras estão encapsuladas no objeto de domínio [`Coupon`](src/main/ja
 - `code`, `description`, `discountValue` e `expirationDate` são obrigatórios.
 - O código é alfanumérico com **6 caracteres**. Caracteres especiais são aceitos na entrada, mas **removidos** antes de salvar e de retornar, e as letras passam para **maiúsculas** (`abc-123` → `ABC123`). Se, depois da limpeza, o código não tiver exatamente 6 caracteres, a criação é rejeitada.
 - O código é **único**: criar um cupom com um código que já existe responde `409 Conflict`.
-- O valor de desconto tem **mínimo de 0.5**, sem máximo.
+- O valor de desconto tem **mínimo de 0.5**, sem máximo de negócio. O cadastro guarda até 15 dígitos inteiros e 4 casas decimais; fora disso a criação é rejeitada (`400`).
 - A data de expiração **não pode estar no passado**.
 - O cupom pode ser criado como **já publicado** (`published: true`).
 - Todo cupom nasce com status `ACTIVE` e `redeemed: false`.
@@ -165,7 +168,8 @@ Pontos em que o enunciado deixava margem, e o que foi decidido:
 - **Apagar um cupom já apagado:** responde `409 Conflict`, deixando explícito que a regra foi aplicada. Um cupom inexistente responde `404`.
 - **Buscar um cupom apagado:** responde `404`. O registro continua no banco (soft delete), mas deixa de existir para quem consome a API.
 - **Publicar ou alterar status por API:** ficou **fora do escopo de propósito**. O enunciado só define regras para criação e exclusão; o campo `published` é definido na criação, como pedido. Criar endpoints para isso exigiria inventar regras que o desafio não especifica.
-- **Extras não solicitados:** o consumer SQS com idempotência e os logs com MDC foram adicionados para demonstrar mensageria e observabilidade. Eles não alteram o comportamento dos endpoints do desafio, e a API funciona sem a fila (`COUPON_SQS_ENABLED=false`).
+- **Extras não solicitados:** o consumer SQS com idempotência e os logs com MDC foram adicionados para demonstrar mensageria e observabilidade. Eles não alteram o comportamento dos endpoints do desafio, e a API funciona sem a fila: o consumer vem desligado por padrão e é ligado com `COUPON_SQS_ENABLED=true` (o `docker compose` já faz isso).
+- **Valor de desconto que não cabe no cadastro:** o enunciado não define máximo, mas todo armazenamento tem um limite. Em vez de arredondar em silêncio ou falhar no banco, a criação é rejeitada com `400` quando o valor passa de 15 dígitos inteiros ou de 4 casas decimais. É um limite técnico, validado junto das demais regras do `Coupon`.
 
 ---
 
@@ -251,7 +255,7 @@ Se o processamento falha, a chave é apagada para a próxima entrega poder tenta
 
 | Variável | Padrão | Para que serve |
 |---|---|---|
-| `COUPON_SQS_ENABLED` | `true` | liga ou desliga o consumer da fila |
+| `COUPON_SQS_ENABLED` | `false` | liga o consumer da fila (o `docker compose` define `true`) |
 | `COUPON_SQS_QUEUE` | `coupon-status-queue.fifo` | nome da fila |
 | `AWS_ENDPOINT` | `http://localhost:4566` | endereço do SQS (LocalStack) |
 | `AWS_REGION` | `us-east-1` | região |

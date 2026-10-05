@@ -133,6 +133,43 @@ class CouponApiIntegrationTest {
     }
 
     @Test
+    @DisplayName("POST /coupon deve rejeitar desconto grande demais para ser guardado, em vez de falhar no banco")
+    void naoDeveCriarCouponComDescontoGigante() throws Exception {
+        criar(payload("ABC123", "100000000000000000000", futuro(), null))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0]", containsString("dígitos inteiros")));
+
+        assertEquals(0, couponRepository.count());
+    }
+
+    @Test
+    @DisplayName("POST /coupon deve rejeitar desconto com mais casas decimais do que o cadastro guarda")
+    void naoDeveCriarCouponComCasasDecimaisDemais() throws Exception {
+        criar(payload("ABC123", "0.50001", futuro(), null))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0]", containsString("casas decimais")));
+
+        assertEquals(0, couponRepository.count());
+    }
+
+    @Test
+    @DisplayName("O desconto devolvido na criação é o mesmo devolvido na busca")
+    void descontoDaCriacaoEIgualAoDaBusca() throws Exception {
+        String body = criar(payload("ABC123", "999999999999999.9999", futuro(), null))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String id = objectMapper.readTree(body).get("id").asText();
+
+        String buscado = mockMvc.perform(get("/coupon/{id}", id))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        // compara o texto do JSON: converter para double perderia justamente as casas que o teste quer conferir
+        assertTrue(body.contains("\"discountValue\":999999999999999.9999"), body);
+        assertTrue(buscado.contains("\"discountValue\":999999999999999.9999"), buscado);
+    }
+
+    @Test
     @DisplayName("POST /coupon deve rejeitar data de expiração no passado")
     void naoDeveCriarCouponComExpiracaoNoPassado() throws Exception {
         criar(payload("ABC123", "0.8", OffsetDateTime.now().minusDays(1).toString(), null))
@@ -155,6 +192,25 @@ class CouponApiIntegrationTest {
         mockMvc.perform(post("/coupon").contentType(MediaType.APPLICATION_JSON).content("{ invalido"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors[0]", containsString("inválido")));
+    }
+
+    @Test
+    @DisplayName("Erros do framework saem no mesmo formato dos erros da aplicação")
+    void errosDoFrameworkUsamOMesmoFormato() throws Exception {
+        mockMvc.perform(post("/coupon").contentType(MediaType.TEXT_PLAIN).content("{}"))
+                .andExpect(status().isUnsupportedMediaType())
+                .andExpect(jsonPath("$.status", is("UNSUPPORTED_MEDIA_TYPE")))
+                .andExpect(jsonPath("$.errors[0]", containsString("application/json")));
+
+        mockMvc.perform(put("/coupon").contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isMethodNotAllowed())
+                .andExpect(jsonPath("$.status", is("METHOD_NOT_ALLOWED")))
+                .andExpect(jsonPath("$.errors[0]", containsString("Método")));
+
+        mockMvc.perform(get("/cupons"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status", is("NOT_FOUND")))
+                .andExpect(jsonPath("$.errors[0]", containsString("não encontrado")));
     }
 
     @Test

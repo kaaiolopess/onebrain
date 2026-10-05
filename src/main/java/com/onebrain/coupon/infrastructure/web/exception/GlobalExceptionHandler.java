@@ -74,6 +74,33 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return new ResponseEntity<>(apiErrorMessage, headers, apiErrorMessage.getStatus());
     }
 
+    /**
+     * Erros do próprio Spring MVC (Content-Type não suportado, método não permitido, endereço inexistente...)
+     * saem no mesmo formato dos erros da aplicação.
+     */
+    @Override
+    protected ResponseEntity<Object> handleExceptionInternal(
+            Exception ex,
+            Object body,
+            HttpHeaders headers,
+            HttpStatusCode statusCode,
+            WebRequest request) {
+
+        HttpStatus status = HttpStatus.resolve(statusCode.value());
+        if (status == null) {
+            status = HttpStatus.INTERNAL_SERVER_ERROR;
+        }
+        String message = switch (status) {
+            case UNSUPPORTED_MEDIA_TYPE -> "Content-Type não suportado: envie application/json";
+            case METHOD_NOT_ALLOWED -> "Método não suportado para este endereço";
+            case NOT_FOUND -> "Endereço não encontrado";
+            default -> status.is4xxClientError() ? "Requisição inválida" : "Erro interno";
+        };
+
+        log.warn("m=handleExceptionInternal, msg={}: {}", message, ex.getMessage());
+        return new ResponseEntity<>(new ApiErrorMessage(status, message), headers, status);
+    }
+
     @ExceptionHandler(CouponNotFoundException.class)
     public ResponseEntity<?> handleCouponNotFoundException(CouponNotFoundException ex) {
         log.warn("m=handleCouponNotFoundException, msg={}", ex.getMessage());

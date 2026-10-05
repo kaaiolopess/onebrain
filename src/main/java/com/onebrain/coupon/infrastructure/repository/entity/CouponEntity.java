@@ -1,5 +1,6 @@
 package com.onebrain.coupon.infrastructure.repository.entity;
 
+import com.onebrain.coupon.domain.model.Coupon;
 import com.onebrain.coupon.domain.model.CouponStatus;
 import jakarta.persistence.*;
 import lombok.*;
@@ -10,12 +11,14 @@ import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "COUPONS", uniqueConstraints = @UniqueConstraint(name = "UK_COUPONS_CODE", columnNames = "code"))
+@Table(name = "COUPONS", uniqueConstraints = @UniqueConstraint(name = CouponEntity.UK_CODE, columnNames = "code"))
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
 public class CouponEntity {
+
+    public static final String UK_CODE = "UK_COUPONS_CODE";
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -27,7 +30,8 @@ public class CouponEntity {
     @Column(nullable = false, columnDefinition = "TEXT")
     private String description;
 
-    @Column(nullable = false, precision = 19, scale = 4)
+    @Column(nullable = false, precision = Coupon.DESCONTO_DIGITOS_INTEIROS + Coupon.DESCONTO_CASAS_DECIMAIS,
+            scale = Coupon.DESCONTO_CASAS_DECIMAIS)
     private BigDecimal discountValue;
 
     @Column(nullable = false)

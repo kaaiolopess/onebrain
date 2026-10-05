@@ -15,9 +15,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.hibernate.exception.ConstraintViolationException;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 
+import java.sql.SQLException;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -51,10 +53,20 @@ class SalvarCouponRepositoryPortImplTest {
     @Test
     @DisplayName("Deve lançar CouponCodigoDuplicadoException quando o banco rejeita o código repetido")
     void deveLancarCodigoDuplicado() {
+        var violacao = new ConstraintViolationException("unique", new SQLException(), "PUBLIC.UK_COUPONS_CODE_INDEX_1");
         when(couponRepository.save(any(CouponEntity.class)))
-                .thenThrow(new DataIntegrityViolationException("UK_COUPONS_CODE"));
+                .thenThrow(new DataIntegrityViolationException("unique", violacao));
 
         assertThrows(CouponCodigoDuplicadoException.class, () -> repository.salvar(CouponFactory.criarCouponNovo()));
+    }
+
+    @Test
+    @DisplayName("Outra violação de integridade não é tratada como código repetido")
+    void naoDeveTratarOutraViolacaoComoCodigoDuplicado() {
+        when(couponRepository.save(any(CouponEntity.class)))
+                .thenThrow(new DataIntegrityViolationException("numeric value out of range"));
+
+        assertThrows(PersistenceCouponException.class, () -> repository.salvar(CouponFactory.criarCouponNovo()));
     }
 
     @Test
