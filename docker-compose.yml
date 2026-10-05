@@ -8,7 +8,8 @@ services:
     environment:
       # logs em JSON (Elastic Common Schema), com os campos do MDC, para Datadog / Grafana Loki
       LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
-      # consumer da fila de status, apontando para o LocalStack
+      # consumer da fila de status, ligado e apontando para o LocalStack
+      COUPON_SQS_ENABLED: "true"
       AWS_ENDPOINT: http://localstack:4566
       REDIS_HOST: redis
     depends_on:
@@ -43,7 +44,7 @@ services:
       - ./localstack/coupon-status.sh:/usr/local/bin/coupon-status
     healthcheck:
       # só fica saudável depois que o script de inicialização criou a fila
-      test: ["CMD", "awslocal", "sqs", "get-queue-url", "--queue-name", "coupon-status-queue"]
+      test: ["CMD", "awslocal", "sqs", "get-queue-url", "--queue-name", "coupon-status-queue.fifo"]
       interval: 5s
       timeout: 5s
       retries: 20

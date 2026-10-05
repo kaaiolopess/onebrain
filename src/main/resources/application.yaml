@@ -45,9 +45,10 @@ spring:
 
 coupon:
   sqs:
-    # consumer da fila ligado por padrão; COUPON_SQS_ENABLED=false sobe só a API, sem precisar do LocalStack
-    enabled: ${COUPON_SQS_ENABLED:true}
-    queue: ${COUPON_SQS_QUEUE:coupon-status-queue}
+    # consumer da fila desligado por padrão, para a API subir sozinha (sem Docker);
+    # COUPON_SQS_ENABLED=true liga o consumer e passa a exigir o LocalStack (o docker compose já define)
+    enabled: ${COUPON_SQS_ENABLED:false}
+    queue: ${COUPON_SQS_QUEUE:coupon-status-queue.fifo}
   idempotencia:
     ttl-processando: 30s
     ttl-concluido: 24h
@@ -56,6 +57,10 @@ logging:
   pattern:
     # campos do MDC em cada linha de log (preenchidos pelo MdcFilter)
     correlation: "[correlationId=%X{correlationId:-} couponId=%X{couponId:-}] "
+  level:
+    # o Hibernate registra como ERROR toda falha de SQL, inclusive o código repetido, que a API responde com 409.
+    # As falhas de banco já são registradas pelos adaptadores e pelo GlobalExceptionHandler, com a causa.
+    org.hibernate.engine.jdbc.spi.SqlExceptionHelper: "OFF"
 
 springdoc:
   swagger-ui:

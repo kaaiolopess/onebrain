@@ -19,8 +19,8 @@ paths:
         - Coupon
       summary: Cria um novo cupom
       description: >
-        Cadastra um cupom. Caracteres especiais do código são removidos antes de salvar,
-        e o código resultante precisa ter exatamente 6 caracteres alfanuméricos.
+        Cadastra um cupom. Caracteres especiais do código são removidos e as letras passam para maiúsculas
+        antes de salvar; o código resultante precisa ter exatamente 6 caracteres alfanuméricos e ser único.
       operationId: criarCoupon
       requestBody:
         required: true
@@ -37,6 +37,12 @@ paths:
                 $ref: '#/components/schemas/CouponResponse'
         '400':
           description: Requisição inválida ou regra de negócio violada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Já existe um cupom com o mesmo código
           content:
             application/json:
               schema:
@@ -115,7 +121,7 @@ components:
       properties:
         code:
           type: string
-          description: Código alfanumérico de 6 caracteres. Caracteres especiais são removidos.
+          description: Código alfanumérico de 6 caracteres, único. Caracteres especiais são removidos e as letras viram maiúsculas.
           example: ABC-123
         description:
           type: string

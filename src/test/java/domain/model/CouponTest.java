@@ -51,8 +51,8 @@ class CouponTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"ABC-123", "A!B@C#1$2%3", " ABC 123 ", "ABC_12.3"})
-    @DisplayName("Deve remover caracteres especiais do código mantendo 6 caracteres")
+    @ValueSource(strings = {"ABC-123", "A!B@C#1$2%3", " ABC 123 ", "ABC_12.3", "abc123", "aBc-123"})
+    @DisplayName("Deve remover caracteres especiais do código e padronizar em maiúsculas, mantendo 6 caracteres")
     void deveRemoverCaracteresEspeciaisDoCodigo(String codigo) {
         Coupon coupon = Coupon.criar(codigo, DESCRICAO, DESCONTO, CouponFactory.dataFutura(), false);
 
@@ -101,6 +101,23 @@ class CouponTest {
         Coupon coupon = Coupon.criar("ABC123", DESCRICAO, desconto, CouponFactory.dataFutura(), false);
 
         assertEquals(desconto, coupon.getDiscountValue());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"0.5001", "0.50000", "999999999999999.9999", "1E+14"})
+    @DisplayName("Deve aceitar desconto dentro do limite de 15 dígitos inteiros e 4 casas decimais")
+    void deveAceitarDescontoNoLimiteDeArmazenamento(String desconto) {
+        Coupon coupon = Coupon.criar("ABC123", DESCRICAO, new BigDecimal(desconto), CouponFactory.dataFutura(), false);
+
+        assertEquals(new BigDecimal(desconto), coupon.getDiscountValue());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"0.50001", "1.23456", "1000000000000000", "100000000000000000000", "1E+20"})
+    @DisplayName("Não deve criar cupom com desconto que o cadastro não consegue guardar sem perder precisão")
+    void naoDeveCriarCouponComDescontoForaDoLimiteDeArmazenamento(String desconto) {
+        assertThrows(RegraNegocioException.class,
+                () -> Coupon.criar("ABC123", DESCRICAO, new BigDecimal(desconto), CouponFactory.dataFutura(), false));
     }
 
     @ParameterizedTest

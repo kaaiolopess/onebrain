@@ -1,5 +1,6 @@
 package com.onebrain.coupon.infrastructure.web.exception;
 
+import com.onebrain.coupon.domain.exception.CouponCodigoDuplicadoException;
 import com.onebrain.coupon.domain.exception.CouponJaApagadoException;
 import com.onebrain.coupon.domain.exception.CouponNotFoundException;
 import com.onebrain.coupon.domain.exception.RegraNegocioException;
@@ -73,6 +74,33 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return new ResponseEntity<>(apiErrorMessage, headers, apiErrorMessage.getStatus());
     }
 
+    /**
+     * Erros do próprio Spring MVC (Content-Type não suportado, método não permitido, endereço inexistente...)
+     * saem no mesmo formato dos erros da aplicação.
+     */
+    @Override
+    protected ResponseEntity<Object> handleExceptionInternal(
+            Exception ex,
+            Object body,
+            HttpHeaders headers,
+            HttpStatusCode statusCode,
+            WebRequest request) {
+
+        HttpStatus status = HttpStatus.resolve(statusCode.value());
+        if (status == null) {
+            status = HttpStatus.INTERNAL_SERVER_ERROR;
+        }
+        String message = switch (status) {
+            case UNSUPPORTED_MEDIA_TYPE -> "Content-Type não suportado: envie application/json";
+            case METHOD_NOT_ALLOWED -> "Método não suportado para este endereço";
+            case NOT_FOUND -> "Endereço não encontrado";
+            default -> status.is4xxClientError() ? "Requisição inválida" : "Erro interno";
+        };
+
+        log.warn("m=handleExceptionInternal, msg={}: {}", message, ex.getMessage());
+        return new ResponseEntity<>(new ApiErrorMessage(status, message), headers, status);
+    }
+
     @ExceptionHandler(CouponNotFoundException.class)
     public ResponseEntity<?> handleCouponNotFoundException(CouponNotFoundException ex) {
         log.warn("m=handleCouponNotFoundException, msg={}", ex.getMessage());
@@ -83,6 +111,13 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(CouponJaApagadoException.class)
     public ResponseEntity<?> handleCouponJaApagadoException(CouponJaApagadoException ex) {
         log.warn("m=handleCouponJaApagadoException, msg={}", ex.getMessage());
+        ApiErrorMessage apiErrorMessage = new ApiErrorMessage(HttpStatus.CONFLICT, ex.getMessage());
+        return new ResponseEntity<>(apiErrorMessage, new HttpHeaders(), apiErrorMessage.getStatus());
+    }
+
+    @ExceptionHandler(CouponCodigoDuplicadoException.class)
+    public ResponseEntity<?> handleCouponCodigoDuplicadoException(CouponCodigoDuplicadoException ex) {
+        log.warn("m=handleCouponCodigoDuplicadoException, msg={}", ex.getMessage());
         ApiErrorMessage apiErrorMessage = new ApiErrorMessage(HttpStatus.CONFLICT, ex.getMessage());
         return new ResponseEntity<>(apiErrorMessage, new HttpHeaders(), apiErrorMessage.getStatus());
     }

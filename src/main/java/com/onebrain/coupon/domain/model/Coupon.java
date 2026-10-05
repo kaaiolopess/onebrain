@@ -11,6 +11,7 @@ import lombok.ToString;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import java.util.Locale;
 import java.util.UUID;
 
 @Getter
@@ -21,6 +22,8 @@ public class Coupon {
 
     public static final int TAMANHO_CODIGO = 6;
     public static final BigDecimal DESCONTO_MINIMO = new BigDecimal("0.5");
+    public static final int DESCONTO_DIGITOS_INTEIROS = 15;
+    public static final int DESCONTO_CASAS_DECIMAIS = 4;
 
     private final UUID id;
     private final String code;
@@ -107,7 +110,7 @@ public class Coupon {
         if (code == null || code.isBlank()) {
             throw new RegraNegocioException("O código do cupom é obrigatório");
         }
-        String codigoLimpo = code.replaceAll("[^A-Za-z0-9]", "");
+        String codigoLimpo = code.replaceAll("[^A-Za-z0-9]", "").toUpperCase(Locale.ROOT);
         if (codigoLimpo.length() != TAMANHO_CODIGO) {
             throw new RegraNegocioException(
                     "O código do cupom deve ter exatamente " + TAMANHO_CODIGO + " caracteres alfanuméricos");
@@ -128,6 +131,16 @@ public class Coupon {
         }
         if (discountValue.compareTo(DESCONTO_MINIMO) < 0) {
             throw new RegraNegocioException("O valor de desconto do cupom deve ser no mínimo " + DESCONTO_MINIMO);
+        }
+        // não há máximo de negócio; os limites abaixo são o que o cadastro consegue guardar sem perder precisão
+        BigDecimal semZerosADireita = discountValue.stripTrailingZeros();
+        if (semZerosADireita.scale() > DESCONTO_CASAS_DECIMAIS) {
+            throw new RegraNegocioException(
+                    "O valor de desconto do cupom deve ter no máximo " + DESCONTO_CASAS_DECIMAIS + " casas decimais");
+        }
+        if (semZerosADireita.precision() - semZerosADireita.scale() > DESCONTO_DIGITOS_INTEIROS) {
+            throw new RegraNegocioException(
+                    "O valor de desconto do cupom deve ter no máximo " + DESCONTO_DIGITOS_INTEIROS + " dígitos inteiros");
         }
         return discountValue;
     }

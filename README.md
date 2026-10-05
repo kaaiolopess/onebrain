@@ -48,28 +48,31 @@ As portas `8080` (aplicação), `6379` (Redis) e `4566` (LocalStack) precisam es
 
 ### Opção 2 — Aplicação pela IDE ou Maven, com a fila (requer JDK 21 e Docker)
 
-Útil para depurar. O Redis e o LocalStack rodam no Docker e a aplicação roda na sua máquina. Não é preciso configurar nada: por padrão a aplicação já aponta para o LocalStack em `localhost:4566`.
+Útil para depurar. O Redis e o LocalStack rodam no Docker e a aplicação roda na sua máquina, com o consumer ligado pela variável `COUPON_SQS_ENABLED=true`. O endereço do LocalStack (`localhost:4566`) já é o padrão.
 
 ```bash
 docker compose up -d redis localstack
-./mvnw spring-boot:run
+
+# Linux / Mac
+COUPON_SQS_ENABLED=true ./mvnw spring-boot:run
+
+# Windows (PowerShell)
+$env:COUPON_SQS_ENABLED="true"; .\mvnw.cmd spring-boot:run
 ```
 
-Na IDE, em vez do segundo comando, rode a classe `MainApplication`.
+Na IDE, defina a mesma variável de ambiente na configuração de execução da classe `MainApplication`.
 
-> O consumer da fila vem **ligado por padrão**. Se o LocalStack não estiver no ar, a aplicação não sobe. Para isso existe a Opção 3.
+> Com o consumer ligado, a aplicação não sobe se o LocalStack não estiver no ar.
 
 ### Opção 3 — Só a API, sem Docker (requer JDK 21)
 
-Desliga o consumer com a variável `COUPON_SQS_ENABLED=false`. A aplicação sobe sozinha, sem Redis e sem fila:
+O consumer da fila vem **desligado por padrão**, então a aplicação sobe sozinha, sem Redis e sem fila:
 
 ```bash
-# Linux / Mac
-COUPON_SQS_ENABLED=false ./mvnw spring-boot:run
-
-# Windows (PowerShell)
-$env:COUPON_SQS_ENABLED="false"; .\mvnw.cmd spring-boot:run
+./mvnw spring-boot:run
 ```
+
+Na IDE, basta rodar a classe `MainApplication`.
 
 ### Endereços
 
@@ -84,7 +87,7 @@ $env:COUPON_SQS_ENABLED="false"; .\mvnw.cmd spring-boot:run
 
 | Método   | Endpoint        | Descrição                         | Sucesso          | Erros                                      |
 |----------|-----------------|-----------------------------------|------------------|--------------------------------------------|
-| `POST`   | `/coupon`       | Cria um novo cupom                | `201 Created`    | `400` requisição inválida / regra violada  |
+| `POST`   | `/coupon`       | Cria um novo cupom                | `201 Created`    | `400` requisição inválida / regra violada, `409` código já existe |
 | `GET`    | `/coupon/{id}`  | Busca um cupom pelo ID            | `200 OK`         | `404` não encontrado ou apagado            |
 | `DELETE` | `/coupon/{id}`  | Apaga um cupom (soft delete)      | `200 OK`         | `404` não encontrado, `409` já apagado     |
 
@@ -140,8 +143,9 @@ Todas as regras estão encapsuladas no objeto de domínio [`Coupon`](src/main/ja
 
 ### Create
 - `code`, `description`, `discountValue` e `expirationDate` são obrigatórios.
-- O código é alfanumérico com **6 caracteres**. Caracteres especiais são aceitos na entrada, mas **removidos** antes de salvar e de retornar (`ABC-123` → `ABC123`). Se, depois da limpeza, o código não tiver exatamente 6 caracteres, a criação é rejeitada.
-- O valor de desconto tem **mínimo de 0.5**, sem máximo.
+- O código é alfanumérico com **6 caracteres**. Caracteres especiais são aceitos na entrada, mas **removidos** antes de salvar e de retornar, e as letras passam para **maiúsculas** (`abc-123` → `ABC123`). Se, depois da limpeza, o código não tiver exatamente 6 caracteres, a criação é rejeitada.
+- O código é **único**: criar um cupom com um código que já existe responde `409 Conflict`.
+- O valor de desconto tem **mínimo de 0.5**, sem máximo de negócio. O cadastro guarda até 15 dígitos inteiros e 4 casas decimais; fora disso a criação é rejeitada (`400`).
 - A data de expiração **não pode estar no passado**.
 - O cupom pode ser criado como **já publicado** (`published: true`).
 - Todo cupom nasce com status `ACTIVE` e `redeemed: false`.
@@ -149,7 +153,8 @@ Todas as regras estão encapsuladas no objeto de domínio [`Coupon`](src/main/ja
 ### Delete
 - Um cupom pode ser apagado a qualquer momento (inclusive depois de expirado).
 - É feito **soft delete**: o registro permanece no banco com status `DELETED` e a data em `deleted_at`, preservando os dados do cadastro.
-- **Não é possível apagar um cupom já apagado** (`409 Conflict`). Um controle de versão (`@Version`) garante isso mesmo com duas requisições simultâneas.
+- **Não é possível apagar um cupom já apagado** (`409 Conflict`). O soft delete é um único `UPDATE` condicional (só alcança o cupom ainda não apagado), então, com duas requisições simultâneas, o banco deixa passar apenas a primeira.
+- O delete **não depende da versão lida**: se o status mudar pela fila entre a leitura e a gravação, o cupom é apagado mesmo assim. O update incrementa a versão (`@Version`), para que uma alteração de status lida antes do delete seja rejeitada em vez de "ressuscitar" o cupom.
 - Um cupom apagado deixa de ser encontrado pelo `GET` (`404`).
 
 ---
@@ -159,16 +164,18 @@ Todas as regras estão encapsuladas no objeto de domínio [`Coupon`](src/main/ja
 Pontos em que o enunciado deixava margem, e o que foi decidido:
 
 - **Código com tamanho diferente de 6 após a limpeza:** a criação é **rejeitada** (`400`). A aplicação não trunca nem completa o código, para não transformar códigos diferentes no mesmo cupom sem o cliente saber.
+- **Código repetido:** o código é o que identifica o cupom para quem o usa, então é **único** e comparado sem diferenciar maiúsculas de minúsculas. Quem garante é uma constraint única no banco, que vale também para criações simultâneas. A unicidade inclui os cupons apagados: o código de um cupom apagado **não é reaproveitado**, para que o histórico preservado pelo soft delete nunca aponte para dois cupons.
 - **Apagar um cupom já apagado:** responde `409 Conflict`, deixando explícito que a regra foi aplicada. Um cupom inexistente responde `404`.
 - **Buscar um cupom apagado:** responde `404`. O registro continua no banco (soft delete), mas deixa de existir para quem consome a API.
 - **Publicar ou alterar status por API:** ficou **fora do escopo de propósito**. O enunciado só define regras para criação e exclusão; o campo `published` é definido na criação, como pedido. Criar endpoints para isso exigiria inventar regras que o desafio não especifica.
-- **Extras não solicitados:** o consumer SQS com idempotência e os logs com MDC foram adicionados para demonstrar mensageria e observabilidade. Eles não alteram o comportamento dos endpoints do desafio, e a API funciona sem a fila (`COUPON_SQS_ENABLED=false`).
+- **Extras não solicitados:** o consumer SQS com idempotência e os logs com MDC foram adicionados para demonstrar mensageria e observabilidade. Eles não alteram o comportamento dos endpoints do desafio, e a API funciona sem a fila: o consumer vem desligado por padrão e é ligado com `COUPON_SQS_ENABLED=true` (o `docker compose` já faz isso).
+- **Valor de desconto que não cabe no cadastro:** o enunciado não define máximo, mas todo armazenamento tem um limite. Em vez de arredondar em silêncio ou falhar no banco, a criação é rejeitada com `400` quando o valor passa de 15 dígitos inteiros ou de 4 casas decimais. É um limite técnico, validado junto das demais regras do `Coupon`.
 
 ---
 
 ## 📨 Consumer SQS: atualização de status
 
-A aplicação consome a fila `coupon-status-queue` para **ativar ou inativar** cupons. Com o `docker compose`, o LocalStack já sobe com a fila e a DLQ (`coupon-status-dlq`) criadas.
+A aplicação consome a fila **FIFO** `coupon-status-queue.fifo` para **ativar ou inativar** cupons. Com o `docker compose`, o LocalStack já sobe com a fila e a DLQ (`coupon-status-dlq.fifo`) criadas.
 
 ### Testando em 4 passos
 
@@ -193,7 +200,7 @@ Os argumentos são: `eventId`, `couponId` e o novo status (`ACTIVE` ou `INACTIVE
 
 Para acompanhar o log no Docker: `docker logs -f onebrain`. Lá as mesmas mensagens saem em JSON, com `correlationId` e `couponId` como campos.
 
-**4. Teste a idempotência.** Repita exatamente o comando do passo 2. O log mostra `Evento evento-1 já processado, ignorando` e o cupom não muda. Para reativar, envie um evento novo:
+**4. Teste a idempotência.** Repita exatamente o comando do passo 2 (o atalho envia cada mensagem com um id de deduplicação novo, para que a repetição chegue até a aplicação em vez de ser descartada pelo SQS). O log mostra `Evento evento-1 já processado, ignorando` e o cupom não muda. Para reativar, envie um evento novo:
 
 ```bash
 docker exec onebrain-localstack coupon-status evento-2 <id-do-cupom> ACTIVE
@@ -209,7 +216,7 @@ docker exec onebrain-redis redis-cli get onebrain:coupon-status:evento:evento-1
 
 # quantidade de mensagens na DLQ
 docker exec onebrain-localstack awslocal sqs get-queue-attributes \
-  --queue-url http://localhost:4566/000000000000/coupon-status-dlq \
+  --queue-url http://localhost:4566/000000000000/coupon-status-dlq.fifo \
   --attribute-names ApproximateNumberOfMessages
 ```
 
@@ -224,8 +231,13 @@ docker exec onebrain-localstack awslocal sqs get-queue-attributes \
 - Cupom apagado não pode ter o status alterado.
 - `DELETED` não é aceito pela fila: apagar é só pelo `DELETE /coupon/{id}`.
 
+### Ordem das mensagens
+A fila é **FIFO** e o `couponId` é o `MessageGroupId`: as mensagens de um mesmo cupom são entregues na ordem em que foram enviadas, uma de cada vez, e cupons diferentes continuam sendo processados em paralelo. Sem isso, um `INACTIVE` seguido de um `ACTIVE` poderia ser aplicado ao contrário e deixar o cupom no estado errado.
+
+Enquanto uma mensagem falha e aguarda nova tentativa, as seguintes do mesmo cupom ficam retidas; elas só andam quando a mensagem é processada ou vai para a DLQ.
+
 ### Idempotência
-O SQS entrega cada mensagem **pelo menos uma vez**, então a mesma mensagem pode chegar repetida. Cada `eventId` é registrado no **Redis**:
+A deduplicação da fila FIFO só cobre reenvios do produtor dentro de 5 minutos. Na entrega, a mensagem ainda volta se o consumer não confirmar a tempo, então a mesma mensagem pode chegar repetida. Cada `eventId` é registrado no **Redis**:
 
 | Estado da chave | O que acontece com a mensagem |
 |---|---|
@@ -243,8 +255,8 @@ Se o processamento falha, a chave é apagada para a próxima entrega poder tenta
 
 | Variável | Padrão | Para que serve |
 |---|---|---|
-| `COUPON_SQS_ENABLED` | `true` | liga ou desliga o consumer da fila |
-| `COUPON_SQS_QUEUE` | `coupon-status-queue` | nome da fila |
+| `COUPON_SQS_ENABLED` | `false` | liga o consumer da fila (o `docker compose` define `true`) |
+| `COUPON_SQS_QUEUE` | `coupon-status-queue.fifo` | nome da fila |
 | `AWS_ENDPOINT` | `http://localhost:4566` | endereço do SQS (LocalStack) |
 | `AWS_REGION` | `us-east-1` | região |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | `test` / `test` | credenciais (as do LocalStack) |
