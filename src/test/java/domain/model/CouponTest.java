@@ -51,8 +51,8 @@ class CouponTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"ABC-123", "A!B@C#1$2%3", " ABC 123 ", "ABC_12.3"})
-    @DisplayName("Deve remover caracteres especiais do código mantendo 6 caracteres")
+    @ValueSource(strings = {"ABC-123", "A!B@C#1$2%3", " ABC 123 ", "ABC_12.3", "abc123", "aBc-123"})
+    @DisplayName("Deve remover caracteres especiais do código e padronizar em maiúsculas, mantendo 6 caracteres")
     void deveRemoverCaracteresEspeciaisDoCodigo(String codigo) {
         Coupon coupon = Coupon.criar(codigo, DESCRICAO, DESCONTO, CouponFactory.dataFutura(), false);
 

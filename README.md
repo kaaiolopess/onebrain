@@ -84,7 +84,7 @@ $env:COUPON_SQS_ENABLED="false"; .\mvnw.cmd spring-boot:run
 
 | Método   | Endpoint        | Descrição                         | Sucesso          | Erros                                      |
 |----------|-----------------|-----------------------------------|------------------|--------------------------------------------|
-| `POST`   | `/coupon`       | Cria um novo cupom                | `201 Created`    | `400` requisição inválida / regra violada  |
+| `POST`   | `/coupon`       | Cria um novo cupom                | `201 Created`    | `400` requisição inválida / regra violada, `409` código já existe |
 | `GET`    | `/coupon/{id}`  | Busca um cupom pelo ID            | `200 OK`         | `404` não encontrado ou apagado            |
 | `DELETE` | `/coupon/{id}`  | Apaga um cupom (soft delete)      | `200 OK`         | `404` não encontrado, `409` já apagado     |
 
@@ -140,7 +140,8 @@ Todas as regras estão encapsuladas no objeto de domínio [`Coupon`](src/main/ja
 
 ### Create
 - `code`, `description`, `discountValue` e `expirationDate` são obrigatórios.
-- O código é alfanumérico com **6 caracteres**. Caracteres especiais são aceitos na entrada, mas **removidos** antes de salvar e de retornar (`ABC-123` → `ABC123`). Se, depois da limpeza, o código não tiver exatamente 6 caracteres, a criação é rejeitada.
+- O código é alfanumérico com **6 caracteres**. Caracteres especiais são aceitos na entrada, mas **removidos** antes de salvar e de retornar, e as letras passam para **maiúsculas** (`abc-123` → `ABC123`). Se, depois da limpeza, o código não tiver exatamente 6 caracteres, a criação é rejeitada.
+- O código é **único**: criar um cupom com um código que já existe responde `409 Conflict`.
 - O valor de desconto tem **mínimo de 0.5**, sem máximo.
 - A data de expiração **não pode estar no passado**.
 - O cupom pode ser criado como **já publicado** (`published: true`).
@@ -160,6 +161,7 @@ Todas as regras estão encapsuladas no objeto de domínio [`Coupon`](src/main/ja
 Pontos em que o enunciado deixava margem, e o que foi decidido:
 
 - **Código com tamanho diferente de 6 após a limpeza:** a criação é **rejeitada** (`400`). A aplicação não trunca nem completa o código, para não transformar códigos diferentes no mesmo cupom sem o cliente saber.
+- **Código repetido:** o código é o que identifica o cupom para quem o usa, então é **único** e comparado sem diferenciar maiúsculas de minúsculas. Quem garante é uma constraint única no banco, que vale também para criações simultâneas. A unicidade inclui os cupons apagados: o código de um cupom apagado **não é reaproveitado**, para que o histórico preservado pelo soft delete nunca aponte para dois cupons.
 - **Apagar um cupom já apagado:** responde `409 Conflict`, deixando explícito que a regra foi aplicada. Um cupom inexistente responde `404`.
 - **Buscar um cupom apagado:** responde `404`. O registro continua no banco (soft delete), mas deixa de existir para quem consome a API.
 - **Publicar ou alterar status por API:** ficou **fora do escopo de propósito**. O enunciado só define regras para criação e exclusão; o campo `published` é definido na criação, como pedido. Criar endpoints para isso exigiria inventar regras que o desafio não especifica.

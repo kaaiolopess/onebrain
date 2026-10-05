@@ -10,7 +10,7 @@ import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "COUPONS")
+@Table(name = "COUPONS", uniqueConstraints = @UniqueConstraint(name = "UK_COUPONS_CODE", columnNames = "code"))
 @Data
 @NoArgsConstructor
 @AllArgsConstructor

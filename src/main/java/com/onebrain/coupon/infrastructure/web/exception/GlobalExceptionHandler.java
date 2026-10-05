@@ -1,5 +1,6 @@
 package com.onebrain.coupon.infrastructure.web.exception;
 
+import com.onebrain.coupon.domain.exception.CouponCodigoDuplicadoException;
 import com.onebrain.coupon.domain.exception.CouponJaApagadoException;
 import com.onebrain.coupon.domain.exception.CouponNotFoundException;
 import com.onebrain.coupon.domain.exception.RegraNegocioException;
@@ -83,6 +84,13 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(CouponJaApagadoException.class)
     public ResponseEntity<?> handleCouponJaApagadoException(CouponJaApagadoException ex) {
         log.warn("m=handleCouponJaApagadoException, msg={}", ex.getMessage());
+        ApiErrorMessage apiErrorMessage = new ApiErrorMessage(HttpStatus.CONFLICT, ex.getMessage());
+        return new ResponseEntity<>(apiErrorMessage, new HttpHeaders(), apiErrorMessage.getStatus());
+    }
+
+    @ExceptionHandler(CouponCodigoDuplicadoException.class)
+    public ResponseEntity<?> handleCouponCodigoDuplicadoException(CouponCodigoDuplicadoException ex) {
+        log.warn("m=handleCouponCodigoDuplicadoException, msg={}", ex.getMessage());
         ApiErrorMessage apiErrorMessage = new ApiErrorMessage(HttpStatus.CONFLICT, ex.getMessage());
         return new ResponseEntity<>(apiErrorMessage, new HttpHeaders(), apiErrorMessage.getStatus());
     }

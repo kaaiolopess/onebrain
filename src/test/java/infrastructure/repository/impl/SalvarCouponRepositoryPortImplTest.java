@@ -1,5 +1,6 @@
 package infrastructure.repository.impl;
 
+import com.onebrain.coupon.domain.exception.CouponCodigoDuplicadoException;
 import com.onebrain.coupon.domain.model.Coupon;
 import com.onebrain.coupon.domain.model.CouponStatus;
 import com.onebrain.coupon.infrastructure.exception.PersistenceCouponException;
@@ -15,6 +16,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.util.UUID;
 
@@ -44,6 +46,15 @@ class SalvarCouponRepositoryPortImplTest {
         assertEquals(CouponStatus.ACTIVE, captor.getValue().getStatus());
         assertEquals(id, result.getId());
         assertEquals("ABC123", result.getCode());
+    }
+
+    @Test
+    @DisplayName("Deve lançar CouponCodigoDuplicadoException quando o banco rejeita o código repetido")
+    void deveLancarCodigoDuplicado() {
+        when(couponRepository.save(any(CouponEntity.class)))
+                .thenThrow(new DataIntegrityViolationException("UK_COUPONS_CODE"));
+
+        assertThrows(CouponCodigoDuplicadoException.class, () -> repository.salvar(CouponFactory.criarCouponNovo()));
     }
 
     @Test

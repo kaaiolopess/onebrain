@@ -94,6 +94,37 @@ class CouponApiIntegrationTest {
     }
 
     @Test
+    @DisplayName("POST /coupon deve gravar o código em maiúsculas")
+    void deveCriarCouponComCodigoEmMaiusculas() throws Exception {
+        criar(payload("abc-123", "0.8", futuro(), null))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.code", is("ABC123")));
+    }
+
+    @Test
+    @DisplayName("POST /coupon deve rejeitar código que já existe, mesmo escrito de outra forma")
+    void naoDeveCriarCouponComCodigoDuplicado() throws Exception {
+        criarERetornarId();
+
+        criar(payload("abc_123", "0.8", futuro(), null))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status", is("CONFLICT")))
+                .andExpect(jsonPath("$.errors[0]", containsString("ABC123")));
+
+        assertEquals(1, couponRepository.count());
+    }
+
+    @Test
+    @DisplayName("POST /coupon não deve reaproveitar o código de um cupom apagado")
+    void naoDeveReaproveitarCodigoDeCouponApagado() throws Exception {
+        String id = criarERetornarId();
+        mockMvc.perform(delete("/coupon/{id}", id)).andExpect(status().isOk());
+
+        criar(payload("ABC-123", "0.8", futuro(), null))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
     @DisplayName("POST /coupon deve rejeitar desconto abaixo de 0.5")
     void naoDeveCriarCouponComDescontoAbaixoDoMinimo() throws Exception {
         criar(payload("ABC123", "0.49", futuro(), null))

@@ -11,6 +11,7 @@ import lombok.ToString;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import java.util.Locale;
 import java.util.UUID;
 
 @Getter
@@ -107,7 +108,7 @@ public class Coupon {
         if (code == null || code.isBlank()) {
             throw new RegraNegocioException("O código do cupom é obrigatório");
         }
-        String codigoLimpo = code.replaceAll("[^A-Za-z0-9]", "");
+        String codigoLimpo = code.replaceAll("[^A-Za-z0-9]", "").toUpperCase(Locale.ROOT);
         if (codigoLimpo.length() != TAMANHO_CODIGO) {
             throw new RegraNegocioException(
                     "O código do cupom deve ter exatamente " + TAMANHO_CODIGO + " caracteres alfanuméricos");
